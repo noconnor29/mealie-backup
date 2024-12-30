@@ -1,0 +1,36 @@
+services:
+  mealie-backup-ts:
+    container_name: "mealie-backup-ts"
+    image: tailscale/tailscale:latest
+    hostname: mealie-backup
+    environment:
+      - TS_AUTHKEY=$TS_AUTHKEY_MEALIE
+      - TS_EXTRA_ARGS=--advertise-tags=tag:container
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - $USERDIR/docker/ts/mealie-backup/state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    #restart: "no"
+
+  mealie-backup:
+    container_name: mealie-backup
+    image: bitnami/python:latest
+    #build: . # Build works, testing Bitnami image due to TS DNS issues
+    environment:
+      - BASE_URL=$MEALIE_BASE_URL
+      - ENDPOINT=/api/admin/backups
+      - AUTH_TOKEN=$MEALIE_AUTH_TOKEN
+    volumes:
+      - $USERDIR/docker/mealie-backup/app:/app
+#      - ./mealie-backup.py:/app/mealie-backup.py
+#      - ./requirements.txt:/app/requirements.txt
+    command: "sh -c 'pip install -r requirements.txt && python mealie-backup.py && sleep 300'" # Testing with Bitnami
+#    command: ["sh", "-c", "python /app/mealie-backup.py && echo 'Sleeping for 5 minutes...' && sleep 300"] # Testing
+#    command: ["python", "/app/mealie-backup.py"] # Desired
+    network_mode: "service:mealie-backup-ts"
+    depends_on:
+      - mealie-backup-ts
+#    restart: "no"
