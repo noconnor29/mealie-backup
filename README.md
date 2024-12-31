@@ -3,28 +3,22 @@ Project to automate [Mealie Recipe Manager](https://github.com/mealie-recipes/me
 
 Also included are systemd units to schedule and execute the compose file weekly.
 
-## Directory Structure
+## Structure
 ```
 mealie-backup
-├── docker-compose.yml
-├── Dockerfile
-└── app
-    ├── mealie-backup.py
-    ├── script.log
-    └── requirements.txt
-
-mealie-backup-ts
-└── state
-
-systemd
-├── mealie-backup.service
-└── mealie-backup.timer
+├── docker-compose.yml             # Executes backup stack
+├── Dockerfile                     # Builds app container w/ Python env
+├── app
+|    ├── mealie-backup.py          # Backup script
+|    ├── script.log                # Contains HTTP status code of last run
+|    └── requirements.txt          # Required Python packages
+└── systemd
+    ├── mealie-backup.service      # Creates and destroys Compose stack
+    └── mealie-backup.timer        # Periodically executes service file
 ```
-## Commands
-Start
+## Manual Commands
 
-```sudo docker compose -f docker-compose.yml --env-file .env up --abort-on-container-exit```
-
-Clean 
-
-```sudo docker compose -f docker-compose.yml --env-file .env down```
+| Function | Command |
+| ------------- | ------------- |
+| Start  | ```docker compose -f /path/to/docker-compose.yml --env-file /path/to/.env up --abort-on-container-exit```  |
+| Stop/Clean-up  | ```docker compose -f /path/to/docker-compose.yml --env-file /path/to/.env down```  |
