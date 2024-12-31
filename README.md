@@ -1,6 +1,8 @@
 # mealie-backup
 Project to automate [Mealie Recipe Manager](https://github.com/mealie-recipes/mealie) backups with a Python script via the Mealie API. Builds a Docker container to run the script and contains a Docker Compose to spin up the container and a Tailscale sidecar.
 
+Also included are systemd units to schedule and execute the compose file weekly.
+
 ## Directory Structure
 ```
 mealie-backup
@@ -13,6 +15,10 @@ mealie-backup
 
 mealie-backup-ts
 └── state
+
+systemd
+├── mealie-backup.service
+└── mealie-backup.timer
 ```
 ## Commands
 Start

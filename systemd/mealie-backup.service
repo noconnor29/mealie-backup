@@ -1,0 +1,11 @@
+# /etc/systemd/system/mealie-backup.service
+
+[Unit]
+Description=Mealie-Backup Docker Compose
+After=docker.service
+
+[Service]
+WorkingDirectory=/path/to/project
+ExecStart=/usr/bin/docker compose -f /path/to/docker-compose.yml --env-file /path/to/.env up --abort-on-container-exit
+ExecStop=/usr/bin/docker compose down
+Restart=no
