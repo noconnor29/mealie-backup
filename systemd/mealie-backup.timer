@@ -7,9 +7,7 @@ Description=Run Mealie-Backup Docker Compose Weekly
 [Timer]
 OnCalendar=Weekly
 Persistent=true
+Unit=mealie-backup.service
 
 [Install]
 WantedBy=timers.target
-
-[Unit]
-Unit=mealie-backup.service
