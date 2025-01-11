@@ -12,4 +12,4 @@ Persistent=true
 WantedBy=timers.target
 
 [Unit]
-Unit:mealie-backup.service
+Unit=mealie-backup.service
