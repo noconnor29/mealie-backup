@@ -1,1 +1,2 @@
+# Copy to .devcontainer/.env and add TS AuthKey
 TAILSCALE_AUTHKEY=tskey-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

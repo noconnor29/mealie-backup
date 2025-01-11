@@ -18,7 +18,7 @@ services:
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_ACCEPT_DNS=true  
     volumes:
-      - $USERDIR/docker/ts/mealie-backup/state:/var/lib/tailscale
+      - $WORKINGDIR/docker/ts/mealie-backup/state:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
     cap_add:
       - net_admin
@@ -36,7 +36,7 @@ services:
       - ENDPOINT=$MEALIE_ENDPOINT
       - AUTH_TOKEN=$MEALIE_AUTH_TOKEN
     volumes:
-      - $USERDIR/docker/mealie-backup/app:/app
+      - $WORKINGDIR/docker/mealie-backup/app:/app
 #      - ./mealie-backup.py:/app/mealie-backup.py
 #      - ./requirements.txt:/app/requirements.txt
      #command: "sh -c 'pip install -r requirements.txt && python mealie-backup.py && sleep 300'" # Testing with Bitnami
