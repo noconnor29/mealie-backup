@@ -9,13 +9,15 @@ Project to automate [Mealie Recipe Manager](https://github.com/mealie-recipes/me
 mealie-backup
 ├── docker-compose.yml             # Executes backup stack
 ├── Dockerfile                     # Builds app container w/ Python env
+├── sample-env                     # Sample env file with req'd variables
 ├── app
 |    ├── mealie-backup.py          # Backup script
-|    ├── script.log                # Contains HTTP status code of last run
-|    └── requirements.txt          # Required Python packages
+|    ├── requirements.txt          # Required Python packages
+|    └── script.log                # Contains HTTP status code of last run; .gitignore'd
 └── systemd
     ├── mealie-backup.service      # Creates and destroys Compose stack
-    └── mealie-backup.timer        # Periodically executes service file
+    ├── mealie-backup.timer        # Periodically executes service file
+    └── systemd-setup.sh           # Sets up systemd units
 ```
 ## Manual Commands
 
