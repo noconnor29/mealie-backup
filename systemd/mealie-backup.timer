@@ -1,5 +1,4 @@
-# sudo systemctl enable mealie-backup.timer
-# sudo systemctl start mealie-backup.timer
+# Edit WorkingDirectory path in ./mealie-backup.service then run ./systemd-setup.sh
 
 [Unit]
 Description=Run Mealie-Backup Docker Compose Weekly
@@ -7,9 +6,7 @@ Description=Run Mealie-Backup Docker Compose Weekly
 [Timer]
 OnCalendar=Weekly
 Persistent=true
+Unit=mealie-backup.service
 
 [Install]
 WantedBy=timers.target
-
-[Unit]
-Unit:mealie-backup.service
