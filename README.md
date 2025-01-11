@@ -10,6 +10,10 @@ mealie-backup
 ├── docker-compose.yml             # Executes backup stack
 ├── Dockerfile                     # Builds app container w/ Python env
 ├── sample-env                     # Sample env file with req'd variables
+├── .devcontainer
+|    ├── devcontainer.json         # Defines DevContainer
+|    ├── Dockerfile                # Defines DevContainer
+     └── sample-env                # DevContainer Variables
 ├── app
 |    ├── mealie-backup.py          # Backup script
 |    ├── requirements.txt          # Required Python packages
