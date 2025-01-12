@@ -1,9 +1,9 @@
 ########################### NETWORKS
 # needs external network shared with mealie compose file
-networks:
-  tailscale:
-    name: tailscale
-    external: true
+# networks:
+#   tailscale:
+#     name: tailscale
+#     external: true
 
 
 ########################### SERVICES
@@ -24,8 +24,8 @@ services:
       - net_admin
       - sys_module
     #restart: "no"
-    networks:
-      - tailscale
+    # networks:
+    #   - tailscale
 
   mealie-backup:
     container_name: mealie-backup
