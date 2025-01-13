@@ -18,15 +18,14 @@ services:
 
   mealie-backup:
     container_name: mealie-backup
-    #image: bitnami/python:latest
-    build: . # Build works, testing Bitnami image due to TS DNS issues
+    build: .
     environment:
       - BASE_URL=$MEALIE_BASE_URL
       - ENDPOINT=$MEALIE_ENDPOINT
       - AUTH_TOKEN=$MEALIE_AUTH_TOKEN
     volumes:
       - $WORKINGDIR/docker/mealie-backup/app:/app
-    command: ["python", "/app/mealie-backup.py"] # Desired
+    command: ["python", "/app/mealie-backup.py"]
     network_mode: "service:mealie-backup-ts"
     depends_on:
       - mealie-backup-ts
