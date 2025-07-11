@@ -1,6 +1,2 @@
 # Copy to .env and modify
-TS_AUTHKEY_MEALIE=tskey-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 WORKINGDIR=/path/to/dir
-MEALIE_BASE_URL=https://mealie.example.com
-MEALIE_ENDPOINT=/api/admin/backups
-MEALIE_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
