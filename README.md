@@ -14,6 +14,8 @@ mealie-backup
 |    ├── mealie-backup.py          # Backup script
 |    ├── requirements.txt          # Required Python packages
 |    └── script.log                # Contains HTTP status code of last run; .gitignore'd
+├── secrets                        # Location for any secrets files needed for stack
+|
 └── systemd
     ├── mealie-backup.service      # Creates and destroys Compose stack
     ├── mealie-backup.timer        # Periodically executes service file
