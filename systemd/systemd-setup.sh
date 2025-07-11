@@ -15,17 +15,17 @@ sudo systemctl daemon-reload
 
 # Enable and start the service
 echo "Enabling and starting $SERVICE_FILE..."
-sudo systemctl enable example.service
-sudo systemctl start example.service
+sudo systemctl enable $SERVICE_FILE
+sudo systemctl start $SERVICE_FILE
 
-# Enable and start the timer
+# Enable and start the timer. Necessary?
 echo "Enabling and starting $TIMER_FILE..."
-sudo systemctl enable example.timer
-sudo systemctl start example.timer
+sudo systemctl enable $TIMER_FILE
+sudo systemctl start $TIMER_FILE 
 
 # Check the status of the service and timer
 echo "Checking the status of $SERVICE_FILE and $TIMER_FILE..."
-sudo systemctl status example.service
-sudo systemctl status example.timer
+sudo systemctl status $SERVICE_FILE
+sudo systemctl status $TIMER_FILE.
 
 echo "Done!"
