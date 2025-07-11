@@ -1,11 +1,14 @@
-# Edit WorkingDirectory path in this file then run ./systemd-setup.sh
+# /etc/systemd/system/mealie-backup.service
 
 [Unit]
 Description=Mealie-Backup Docker Compose
 After=docker.service
 
 [Service]
-WorkingDirectory=/path/to/project
+WorkingDirectory=/opt/docker/mealie-backup
 ExecStart=/usr/bin/docker compose -f ./docker-compose.yml --env-file ./.env up --abort-on-container-exit
 ExecStop=/usr/bin/docker compose -f ./docker-compose.yml --env-file ./.env down
 Restart=no
+
+[Install]
+WantedBy=multi-user.target
