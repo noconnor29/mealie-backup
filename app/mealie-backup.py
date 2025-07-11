@@ -3,19 +3,6 @@ import requests
 import datetime
 import logging
 
-# Configuration
-BASE_URL = os.getenv("BASE_URL", "https://example.com")
-ENDPOINT = os.getenv("ENDPOINT", "/api/admin/backups")
-AUTH_TOKEN = os.getenv("AUTH_TOKEN", None)
-HEALTH_ENDPOINT = os.getenv("HEALTH_ENDPOINT", "/")  # Dedicated health check endpoint if available
-
-URL = f"{BASE_URL}{ENDPOINT}"
-HEALTH_URL = f"{BASE_URL}{HEALTH_ENDPOINT}"
-DATA = {"key": "value"}  # Adjust your payload as needed
-HEADERS = {
-    "Authorization": f"Bearer {AUTH_TOKEN}" if AUTH_TOKEN else "",
-    "Content-Type": "application/json"
-}
 
 # Set a fixed path for the log file
 LOG_FILE = "/app/script.log"
@@ -27,6 +14,62 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+def load_secret(secret_name: str, default: str) -> str:
+    """
+    Load secret from Docker secrets file and return its content as a string.
+
+    Args:
+        secret_name (str): The name of the secret file to load from the Docker secrets 
+                          directory (e.g., "api_key" loads from "/run/secrets/api_key").
+        default (str, optional): Default value to return if the secret file does not exist.
+
+    Returns:
+        str: The content of the secret file with leading/trailing whitespace stripped,
+             or the default value if file doesn't exist and default is provided.
+
+    Raises:
+        FileNotFoundError: If the secret file does not exist and no default is provided.
+        PermissionError: If there are insufficient permissions to read the secret file.
+        Exception: For any other errors encountered while reading the secret file.
+
+    Notes:
+        - Reads from the standard Docker secrets path "/run/secrets/{secret_name}".
+        - Automatically strips whitespace from the secret content.
+        - Returns default value only if file doesn't exist, not for other errors.
+        - Designed for use in Docker containers with mounted secrets.
+    """
+    secret_path = f"/run/secrets/{secret_name}"
+    try:
+        with open(secret_path, 'r') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        if default is not None:
+            return default
+        raise FileNotFoundError(f"Secret file not found: {secret_path}")
+    except PermissionError:
+        raise PermissionError(f"Permission denied reading secret: {secret_path}")
+    except Exception as e:
+        raise Exception(f"Error reading secret {secret_name}: {str(e)}")
+
+def build_url(base_url: str, endpoint: str):
+    """
+    Build a URL by combining base URL and endpoint with exactly one slash separator.
+
+    Args:
+        base_url (str): The base URL (e.g., "https://example.com" or "https://example.com/")
+        endpoint (str): The endpoint path (e.g., "/api/backup" or "api/backup")
+
+    Returns:
+        str: Complete URL with exactly one slash between base_url and endpoint
+
+    Examples:
+        build_url("https://example.com", "/api/backup") -> "https://example.com/api/backup"
+        build_url("https://example.com/", "api/backup") -> "https://example.com/api/backup"
+        build_url("https://example.com/", "/api/backup") -> "https://example.com/api/backup"
+        build_url("https://example.com", "api/backup") -> "https://example.com/api/backup"
+    """
+    return f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
 
 def health_check(url: str) -> bool:
     """
@@ -56,7 +99,7 @@ def health_check(url: str) -> bool:
         return False
 
 
-def get_backups():
+def get_backups(url: str):
     """
     Fetch the list of existing backups from the server.
 
@@ -70,11 +113,10 @@ def get_backups():
         - Returns an empty list if the request fails.
     """
     try:
-        response = requests.get(URL, headers=HEADERS)
+        response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
         backups = response.json()  # Returns a dictionary
         logging.info(f"Fetched backups: {backups}")
-        print(f"{datetime.datetime.now()} - Fetched backups: {backups}")
         return backups
     except requests.RequestException as e:
         logging.error(f"Error fetching backups: {e}")
@@ -82,11 +124,12 @@ def get_backups():
         return {}
 
 
-def delete_backup(backup_name: str):
+def delete_backup(url: str, backup_name: str):
     """
     Delete a specific backup by its name.
 
     Args:
+        url (str): The URL and backup endpoint for the Mealie API
         backup_name (str): The name of the backup to delete, typically the filename 
                            (e.g., "mealie_YYYY.MM.DD.HH.MM.SS.zip").
 
@@ -96,7 +139,7 @@ def delete_backup(backup_name: str):
         - Handles and logs errors if the request fails.
     """
     try:
-        delete_url = f"{URL}/{backup_name}"
+        delete_url = f"{url}/{backup_name}"
         response = requests.delete(delete_url, headers=HEADERS)
         response.raise_for_status()
         logging.info(f"Deleted backup: {backup_name}")
@@ -106,9 +149,12 @@ def delete_backup(backup_name: str):
         print(f"{datetime.datetime.now()} - Error deleting backup {backup_name}: {e}")
 
 
-def delete_all_backups():
+def delete_all_backups(url: str):
     """
     Delete all existing backups on the server.
+
+    Args:
+        url (str): The URL and backup endpoint for the Mealie API
 
     Notes:
         - Fetches the list of backups via `get_backups`.
@@ -116,33 +162,40 @@ def delete_all_backups():
         - Logs and prints the status of each deletion.
         - Skips backups that do not have a valid `name` field.
     """
-    backups = get_backups()  # Fetch the backups
+    backups = get_backups(url)  # Fetch the backups
+    print(f"{datetime.datetime.now()} - Backups found: {len(backups['imports'])}")
     imports = backups.get('imports', [])  # Extract the list of imports
     for backup in imports:
         backup_name = backup.get('name')  # Extract the backup name
         if backup_name:
-            delete_backup(backup_name)  # Pass the name to delete_backup
+            delete_backup(url, backup_name)  # Pass the name to delete_backup
     logging.info("All backups deleted.")
     print(f"{datetime.datetime.now()} - All backups deleted.")
 
 
-def create_backup():
+def create_backup(url: str):
     """
     Create a new backup by sending a POST request to the backups endpoint.
+
+    Args:
+        url (str): The URL and backup endpoint for the Mealie API
 
     Notes:
         - Logs and prints the response if the backup creation is successful.
         - Handles and logs errors if the request fails.
     """
     try:
-        response = requests.post(URL, headers=HEADERS)
+        response = requests.post(url, headers=HEADERS)
         response.raise_for_status()
         logging.info(f"Backup created: {response.json()}")
-        print(f"{datetime.datetime.now()} - Backup created: {response.json()}")
+        backups = get_backups(url)  # Fetch the backups
+        imports = backups.get('imports', [])  # Extract the list of imports
+        for backup in imports:
+            backup_name = backup.get('name')
+        print(f"{datetime.datetime.now()} - New backup created: {backup_name}")
     except requests.RequestException as e:
         logging.error(f"Error creating backup: {e}")
         print(f"{datetime.datetime.now()} - Error creating backup: {e}")
-
 
 if __name__ == "__main__":
     """
@@ -153,14 +206,25 @@ if __name__ == "__main__":
     - If the health check passes, deletes all existing backups and creates a new backup.
     - Logs and prints the status of each operation.
     """
-    if not AUTH_TOKEN:
+    '''base_url = load_secret("MEALIE_BASE_URL", "https://example.com")'''
+    base_url = load_secret("MEALIE_BASE_URL_TS", "https://example.com")
+    backup_endpoint = load_secret("MEALIE_BACKUP_ENDPOINT", "/api/admin/backups")
+    auth_token = load_secret("MEALIE_AUTH_TOKEN", None)
+    health_endpoint = load_secret("MEALIE_HEALTH_ENDPOINT", "/")  # Dedicated health check endpoint if available
+    data = {"key": "value"}  # Adjust your payload as needed
+    HEADERS = {
+        "Authorization": f"Bearer {auth_token}" if auth_token else "",
+        "Content-Type": "application/json"
+    }
+     
+    if not auth_token:
         error_msg = "Authorization token is missing! Please set the AUTH_TOKEN environment variable."
         logging.error(error_msg)
         print(error_msg)
     else:
-        if health_check(HEALTH_URL):
-            delete_all_backups()
-            create_backup()
+        if health_check(build_url(base_url, health_endpoint)):
+            delete_all_backups(build_url(base_url, backup_endpoint))
+            create_backup(build_url(base_url, backup_endpoint))
         else:
             error_msg = "Health check failed. Aborting backup operations."
             logging.error(error_msg)
