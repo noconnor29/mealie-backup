@@ -23,9 +23,9 @@ echo "Enabling and starting $TIMER_FILE..."
 sudo systemctl enable $TIMER_FILE
 sudo systemctl start $TIMER_FILE 
 
-# Check the status of the service and timer
-echo "Checking the status of $SERVICE_FILE and $TIMER_FILE..."
-sudo systemctl status $SERVICE_FILE
-sudo systemctl status $TIMER_FILE.
+# # Check the status of the service and timer
+# echo "Checking the status of $SERVICE_FILE and $TIMER_FILE..."
+# sudo systemctl status $SERVICE_FILE
+# sudo systemctl status $TIMER_FILE
 
 echo "Done!"

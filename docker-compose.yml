@@ -5,7 +5,9 @@ services:
     image: tailscale/tailscale:latest
     hostname: mealie-backup
     environment:
-      - TS_EXTRA_ARGS=--advertise-tags=tag:container --auth-key file:/run/secrets/TS_AUTHKEY_MEALIE_BACKUP
+      #- TS_AUTHKEY=/run/secrets/TS_AUTHKEY_MEALIE_BACKUP
+      #- TS_EXTRA_ARGS=--advertise-tags=tag:backup
+      - TS_EXTRA_ARGS=--advertise-tags=tag:backup --auth-key file:/run/secrets/TS_AUTHKEY_MEALIE_BACKUP
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_ACCEPT_DNS=true  
     volumes:
@@ -26,6 +28,12 @@ services:
   mealie-backup:
     container_name: mealie-backup
     build: .
+    environment:
+      - MEALIE_BACKUP_PATH=$MEALIE_BACKUP_PATH
+      - MEALIE_HEALTH_PATH=$MEALIE_HEALTH_PATH
+      - MEALIE_DOWNLOAD_PATH=$MEALIE_DOWNLOAD_PATH
+      - NC_USER=$NC_USER
+      - WEBDAV_PATH=$WEBDAV_PATH  
     volumes:
       - $WORKINGDIR/docker/mealie-backup/app:/app
     command: ["python", "/app/mealie-backup.py"]
@@ -36,8 +44,9 @@ services:
     secrets:
       - MEALIE_BASE_URL
       - MEALIE_BASE_URL_TS
-      - MEALIE_BACKUP_ENDPOINT
       - MEALIE_AUTH_TOKEN
+      - NC_BASE_URL_TS
+      - NC_PASS  
 
 secrets:
   MEALIE_BASE_URL:
@@ -50,3 +59,7 @@ secrets:
     file: ./secrets/MEALIE_AUTH_TOKEN
   TS_AUTHKEY_MEALIE_BACKUP:
     file: ./secrets/TS_AUTHKEY_MEALIE_BACKUP
+  NC_BASE_URL_TS:
+    file: ./secrets/NC_BASE_URL_TS
+  NC_PASS:
+    file: ./secrets/NC_PASS

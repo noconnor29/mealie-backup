@@ -1,2 +1,7 @@
 # Copy to .env and modify
-WORKINGDIR=/path/to/dir
+WORKINGDIR=/opt
+MEALIE_BACKUP_PATH=/api/admin/backups
+MEALIE_HEALTH_PATH=/
+MEALIE_DOWNLOAD_PATH=/api/utils/download?token=
+NC_USER=mealie
+WEBDAV_PATH=/remote.php/dav/files

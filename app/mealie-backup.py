@@ -1,11 +1,46 @@
+"""
+mealie-backup.py
+
+Automates the backup of Mealie data and uploads the backup to a Nextcloud WebDAV server.
+
+This script:
+- Authenticates with the Mealie API and Nextcloud WebDAV using secrets from /run/secrets.
+- Performs a connectivity check on the Mealie server.
+- Deletes existing backups on the Mealie server.
+- Creates a new backup and retrieves its download token.
+- Downloads the backup file to a temporary location.
+- Uploads the backup file to a specified Nextcloud WebDAV directory.
+- Logs operations and errors to /app/script.log.
+
+Classes:
+    Mealie: Handles Mealie API configuration and authentication.
+    Nextcloud: Handles Nextcloud WebDAV configuration and authentication.
+
+Functions:
+    load_secrets(): Loads secrets from /run/secrets.
+    build_url(*parts): Joins URL parts with single slashes.
+    health_check(url): Checks if the Mealie server is reachable.
+    get_backups(url): Retrieves a list of existing backups.
+    delete_backup(url, backup_name): Deletes a specific backup.
+    delete_local_backups(url): Deletes all existing backups.
+    create_backup(url): Creates a new backup on the Mealie server.
+    get_backup_token(backup_name): Retrieves a download token for a backup.
+    get_backup_file(file_token): Downloads a backup file using its token.
+    upload_file_webdav(nextcloud, filename, local_path): Uploads a file to Nextcloud WebDAV.
+
+Entry point:
+    When run as a script, performs the full backup and upload workflow.
+"""
+
 import os
-import requests
 import datetime
 import logging
-
+from pathlib import Path
+import requests
 
 # Set a fixed path for the log file
 LOG_FILE = "/app/script.log"
+
 
 # Logging Configuration
 logging.basicConfig(
@@ -15,61 +50,63 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-def load_secret(secret_name: str, default: str) -> str:
+
+class Mealie:
+    """Handles Mealie API configuration."""
+    def __init__(self):
+        secrets = load_secrets()
+        self.base_url = secrets.get('MEALIE_BASE_URL_TS')
+        self.backup_url = build_url(self.base_url, os.getenv('MEALIE_BACKUP_PATH'))
+        self.health_url = build_url(self.base_url, os.getenv('MEALIE_HEALTH_PATH'))
+        self.download_url = build_url(self.base_url, os.getenv('MEALIE_DOWNLOAD_PATH'))
+        self.auth_token = secrets.get('MEALIE_AUTH_TOKEN')
+        self.headers = {
+            "Authorization": f"Bearer {self.auth_token}" if self.auth_token else "",
+            "Content-Type": "application/json"
+        }
+
+
+class Nextcloud:
+    '''Handles Nextcloud WebDAV configuration as a backup target.'''
+    def __init__(self):
+        secrets = load_secrets()
+
+        self.user = os.getenv('NC_USER')
+        self.password = secrets.get('NC_PASS')
+        self.webdav_url = build_url(
+            secrets.get('NC_BASE_URL_TS'),
+            os.getenv('WEBDAV_PATH'),
+            os.getenv('NC_USER')
+            )
+
+
+def load_secrets():
+    """Load all secrets from /run/secrets into a dictionary"""
+    secrets = {}
+    secrets_dir = Path("/run/secrets")
+
+    for secret_file in secrets_dir.iterdir():
+        if secret_file.is_file():
+            secrets[secret_file.name] = secret_file.read_text().strip()
+
+    return secrets
+
+
+def build_url(*parts):
     """
-    Load secret from Docker secrets file and return its content as a string.
+    Build URL from any number of parts, ensuring exactly one slash between each"""
+    if not parts:
+        return ""
 
-    Args:
-        secret_name (str): The name of the secret file to load from the Docker secrets 
-                          directory (e.g., "api_key" loads from "/run/secrets/api_key").
-        default (str, optional): Default value to return if the secret file does not exist.
+    # Filter out empty/None parts and strip slashes
+    clean_parts = []
+    for part in parts:
+        if part:  # Skip None or empty strings
+            clean_parts.append(str(part).strip('/'))
 
-    Returns:
-        str: The content of the secret file with leading/trailing whitespace stripped,
-             or the default value if file doesn't exist and default is provided.
+    # Join with single slashes
+    return '/'.join(clean_parts)
 
-    Raises:
-        FileNotFoundError: If the secret file does not exist and no default is provided.
-        PermissionError: If there are insufficient permissions to read the secret file.
-        Exception: For any other errors encountered while reading the secret file.
-
-    Notes:
-        - Reads from the standard Docker secrets path "/run/secrets/{secret_name}".
-        - Automatically strips whitespace from the secret content.
-        - Returns default value only if file doesn't exist, not for other errors.
-        - Designed for use in Docker containers with mounted secrets.
-    """
-    secret_path = f"/run/secrets/{secret_name}"
-    try:
-        with open(secret_path, 'r') as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        if default is not None:
-            return default
-        raise FileNotFoundError(f"Secret file not found: {secret_path}")
-    except PermissionError:
-        raise PermissionError(f"Permission denied reading secret: {secret_path}")
-    except Exception as e:
-        raise Exception(f"Error reading secret {secret_name}: {str(e)}")
-
-def build_url(base_url: str, endpoint: str):
-    """
-    Build a URL by combining base URL and endpoint with exactly one slash separator.
-
-    Args:
-        base_url (str): The base URL (e.g., "https://example.com" or "https://example.com/")
-        endpoint (str): The endpoint path (e.g., "/api/backup" or "api/backup")
-
-    Returns:
-        str: Complete URL with exactly one slash between base_url and endpoint
-
-    Examples:
-        build_url("https://example.com", "/api/backup") -> "https://example.com/api/backup"
-        build_url("https://example.com/", "api/backup") -> "https://example.com/api/backup"
-        build_url("https://example.com/", "/api/backup") -> "https://example.com/api/backup"
-        build_url("https://example.com", "api/backup") -> "https://example.com/api/backup"
-    """
-    return f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
 
 def health_check(url: str) -> bool:
     """
@@ -90,16 +127,16 @@ def health_check(url: str) -> bool:
     try:
         response = requests.get(url, timeout=5)
         response.raise_for_status()
-        logging.info(f"Health check successful: {response.status_code}")
+        logging.info("Health check successful: %s", response.status_code)
         print(f"{datetime.datetime.now()} - Health check successful: {response.status_code}")
         return True
     except requests.RequestException as e:
-        logging.error(f"Health check failed: {e}")
+        logging.error("Health check failed: %s", e)
         print(f"{datetime.datetime.now()} - Health check failed: {e}")
         return False
 
 
-def get_backups(url: str):
+def get_local_backups(url: str):
     """
     Fetch the list of existing backups from the server.
 
@@ -113,13 +150,13 @@ def get_backups(url: str):
         - Returns an empty list if the request fails.
     """
     try:
-        response = requests.get(url, headers=HEADERS)
+        response = requests.get(url, headers=mealie.headers, timeout=10)
         response.raise_for_status()
         backups = response.json()  # Returns a dictionary
-        logging.info(f"Fetched backups: {backups}")
+        logging.info("Fetched backups: %s", backups)
         return backups
     except requests.RequestException as e:
-        logging.error(f"Error fetching backups: {e}")
+        logging.error("Error fetching backups: %s", e)
         print(f"{datetime.datetime.now()} - Error fetching backups: {e}")
         return {}
 
@@ -130,8 +167,7 @@ def delete_backup(url: str, backup_name: str):
 
     Args:
         url (str): The URL and backup endpoint for the Mealie API
-        backup_name (str): The name of the backup to delete, typically the filename 
-                           (e.g., "mealie_YYYY.MM.DD.HH.MM.SS.zip").
+        backup_name (str): The name of the backup to delete
 
     Notes:
         - Sends a DELETE request to the backup API endpoint.
@@ -140,18 +176,19 @@ def delete_backup(url: str, backup_name: str):
     """
     try:
         delete_url = f"{url}/{backup_name}"
-        response = requests.delete(delete_url, headers=HEADERS)
+        response = requests.delete(delete_url, headers=mealie.headers, timeout=10)
         response.raise_for_status()
-        logging.info(f"Deleted backup: {backup_name}")
+        logging.info("Deleted backup: %s", backup_name)
         print(f"{datetime.datetime.now()} - Deleted backup: {backup_name}")
     except requests.RequestException as e:
-        logging.error(f"Error deleting backup {backup_name}: {e}")
+        logging.error("Error deleting backup %s: %s", backup_name, e)
         print(f"{datetime.datetime.now()} - Error deleting backup {backup_name}: {e}")
 
 
-def delete_all_backups(url: str):
+def delete_local_backups(url: str):
     """
-    Delete all existing backups on the server.
+    Delete existing backups on the server so that only the most recent
+    is locally available.
 
     Args:
         url (str): The URL and backup endpoint for the Mealie API
@@ -162,13 +199,13 @@ def delete_all_backups(url: str):
         - Logs and prints the status of each deletion.
         - Skips backups that do not have a valid `name` field.
     """
-    backups = get_backups(url)  # Fetch the backups
+    backups = get_local_backups(url)
     print(f"{datetime.datetime.now()} - Backups found: {len(backups['imports'])}")
-    imports = backups.get('imports', [])  # Extract the list of imports
+    imports = backups.get('imports', [])
     for backup in imports:
-        backup_name = backup.get('name')  # Extract the backup name
+        backup_name = backup.get('name')
         if backup_name:
-            delete_backup(url, backup_name)  # Pass the name to delete_backup
+            delete_backup(url, backup_name)
     logging.info("All backups deleted.")
     print(f"{datetime.datetime.now()} - All backups deleted.")
 
@@ -180,51 +217,185 @@ def create_backup(url: str):
     Args:
         url (str): The URL and backup endpoint for the Mealie API
 
-    Notes:
-        - Logs and prints the response if the backup creation is successful.
-        - Handles and logs errors if the request fails.
+    Returns:
+        str: The name of the newly created backup, or None if failed
     """
     try:
-        response = requests.post(url, headers=HEADERS)
+        response = requests.post(url, headers=mealie.headers, timeout=10)
         response.raise_for_status()
-        logging.info(f"Backup created: {response.json()}")
-        backups = get_backups(url)  # Fetch the backups
-        imports = backups.get('imports', [])  # Extract the list of imports
-        for backup in imports:
-            backup_name = backup.get('name')
-        print(f"{datetime.datetime.now()} - New backup created: {backup_name}")
+        logging.info("Backup created: %s", response.json())
+
+        backups = get_local_backups(url)
+        imports = backups.get('imports', [])
+
+        new_backup_name = imports[0].get('name') if imports else None
+        print(f"{datetime.datetime.now()} - New backup created: {new_backup_name}")
+        logging.info("New backup created: %s", new_backup_name)
+        return new_backup_name
+
     except requests.RequestException as e:
-        logging.error(f"Error creating backup: {e}")
+        logging.error("Error creating backup: %s", e)
         print(f"{datetime.datetime.now()} - Error creating backup: {e}")
+        return None
+
+def get_backup_token(backup_name):
+    """
+    Get file token for a specific backup by sending GET request to backup URL.
+
+    Args:
+        backup_name (str): Name of the backup file to get token for
+
+    Returns:
+        str: The file token string, or None if request fails
+    """
+    try:
+        token_url = build_url(mealie.backup_url, backup_name)
+        response = requests.get(token_url, headers=mealie.headers, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        file_token = data.get('fileToken')
+
+        if file_token:
+            logging.info("%s: %s", backup_name, file_token)
+            print(f"{datetime.datetime.now()} - Token retrieved: {file_token}")
+            return file_token
+        else:
+            logging.warning("No file_token found in response for %s", backup_name)
+            return None
+
+    except requests.RequestException as e:
+        logging.error("Error getting backup token for %s: %s", backup_name, e)
+        return None
+
+def get_backup_file(file_token):
+    """
+    Download backup file using file token.
+
+    Args:
+        file_token (str): Token to authenticate the download
+
+    Returns:
+        str: Downloaded filename, or None if download fails
+    """
+    try:
+        tokenized_download_url = mealie.download_url + file_token
+        response = requests.get(
+            tokenized_download_url,
+            headers=mealie.headers,
+            timeout=10
+        )
+        response.raise_for_status()
+
+        # Extract filename from Content-Disposition header
+        filename = None
+        if 'Content-Disposition' in response.headers:
+            content_disposition = response.headers['Content-Disposition']
+            if 'filename=' in content_disposition:
+                filename = content_disposition.split('filename=')[1].strip('"')
+
+        # Fallback if filename not found in headers
+        if not filename:
+            filename = f"mealie_{datetime.datetime.now().strftime('%Y.%m.%d.%H.%M.%S')}.zip"
+
+        temp_file_path = f"/tmp/{filename}"
+
+        with open(temp_file_path, 'wb') as f:
+            f.write(response.content)
+
+        logging.info("Downloaded backup: %s", filename)
+        print(f"{datetime.datetime.now()} - Downloaded: {filename}")
+        return filename, temp_file_path
+
+    except requests.RequestException as e:
+        logging.error("Error downloading backup: %s", e)
+        print(f"{datetime.datetime.now()} - Error downloading backup: {e}")
+        return None
+
+def upload_file_webdav(nextcloud, filename, local_path=None):
+    """
+    Upload a file to WebDAV server using PUT request.
+
+    Args:
+        nextcloud: Nextcloud instance with credentials and URLs
+        filename: Target filename on server
+        local_path: Local file path (defaults to /tmp/filename if None)
+
+    Returns:
+        bool: True if upload successful, False otherwise
+    """
+    if local_path is None:
+        local_path = f"/tmp/{filename}"
+
+    if not os.path.exists(local_path):
+        logging.error("Local file does not exist:  %s", local_path)
+        return False
+
+    url = build_url(nextcloud.webdav_url, '/Mealie/', filename)
+    logging.info("Uploading %s to %s", filename, url)
+
+    try:
+        with open(local_path, 'rb') as file:
+            response = requests.put(
+                url,
+                data=file,
+                auth=(nextcloud.user, nextcloud.password),
+                headers={"X-Requested-With": "XMLHttpRequest"},
+                timeout=60
+            )
+
+        # Check for successful upload (WebDAV typically returns 201 or 204)
+        if response.status_code in [200, 201, 204]:
+            print(
+                f"{datetime.datetime.now()} - ",
+                f"✓ Upload successful: {filename} ({response.status_code}"
+            )
+            logging.info("✓ Upload successful: %s (%s)", filename, response.status_code)
+            return True
+        else:
+            logging.error("✗ Upload failed: %s - Status %s", filename, response.status_code)
+            logging.error("Response: %s", response.text[:200])
+            return False
+
+    except requests.exceptions.Timeout:
+        logging.error("✗ Upload timeout: %s", filename)
+        return False
+    except requests.exceptions.ConnectionError as e:
+        logging.error("✗ Connection error uploading %s: %s", filename, e)
+        return False
+    except requests.exceptions.RequestException as e:
+        logging.error("✗ Request error uploading %s: %s", filename, e)
+        return False
+    except FileNotFoundError:
+        logging.error("✗ Local file not found: %s", local_path)
+        return False
+    except Exception as e:
+        logging.error("✗ Unexpected error uploading %s: %s", filename, e)
+        return False
+
 
 if __name__ == "__main__":
-    """
-    Main entry point of the script.
+    mealie = Mealie()
+    nc = Nextcloud()
 
-    - Validates if the AUTH_TOKEN environment variable is set.
-    - Performs a health check on the server.
-    - If the health check passes, deletes all existing backups and creates a new backup.
-    - Logs and prints the status of each operation.
-    """
-    '''base_url = load_secret("MEALIE_BASE_URL", "https://example.com")'''
-    base_url = load_secret("MEALIE_BASE_URL_TS", "https://example.com")
-    backup_endpoint = load_secret("MEALIE_BACKUP_ENDPOINT", "/api/admin/backups")
-    auth_token = load_secret("MEALIE_AUTH_TOKEN", None)
-    health_endpoint = load_secret("MEALIE_HEALTH_ENDPOINT", "/")  # Dedicated health check endpoint if available
-    data = {"key": "value"}  # Adjust your payload as needed
-    HEADERS = {
-        "Authorization": f"Bearer {auth_token}" if auth_token else "",
-        "Content-Type": "application/json"
-    }
-     
-    if not auth_token:
-        error_msg = "Authorization token is missing! Please set the AUTH_TOKEN environment variable."
+    if not mealie.auth_token:
+        error_msg = "Authorization token is missing! Please check the AUTH_TOKEN secret."
         logging.error(error_msg)
         print(error_msg)
     else:
-        if health_check(build_url(base_url, health_endpoint)):
-            delete_all_backups(build_url(base_url, backup_endpoint))
-            create_backup(build_url(base_url, backup_endpoint))
+        if health_check(mealie.health_url):
+            delete_local_backups(mealie.backup_url)
+            created_backup = create_backup(mealie.backup_url)
+            if created_backup:
+                backupToken = get_backup_token(created_backup)
+                result = get_backup_file(backupToken)
+                if result is not None:
+                    backup_file_name, backup_file_path = result
+                    upload_file_webdav(nc, backup_file_name, backup_file_path)
+
+                else:
+                    print("Backup download failed.")
+
         else:
             error_msg = "Health check failed. Aborting backup operations."
             logging.error(error_msg)
