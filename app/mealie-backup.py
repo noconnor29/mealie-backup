@@ -298,7 +298,8 @@ def get_backup_file(file_token):
         if not filename:
             filename = f"mealie_{datetime.datetime.now().strftime('%Y.%m.%d.%H.%M.%S')}.zip"
 
-        temp_file_path = f"/tmp/{filename}"
+        safe_filename = os.path.basename(filename)
+        temp_file_path = os.path.join("/tmp", safe_filename)
 
         with open(temp_file_path, 'wb') as f:
             f.write(response.content)
